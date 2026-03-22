@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI BuildSpec Generator — Agent Visualizer by Vrushabh Chaudhari</title>
+  <meta name="description" content="An interactive visualizer showing how an AI agent converts plain-English developer requests into production-ready AWS CodeBuild buildspec.yml files using local LLaMA 3.2."/>
+  <meta property="og:title" content="AI BuildSpec Generator — Agent Visualizer"/>
+  <meta property="og:description" content="Watch an AI agent generate AWS CodeBuild configs from plain English — live interactive demo."/>
+  <meta property="og:type" content="website"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a0d14;
+      --surface: #111827;
+      --surface2: #1a2235;
+      --border: #1e2d40;
+      --accent: #3b82f6;
+      --accent2: #8b5cf6;
+      --green: #10b981;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --orange: #f97316;
+      --text: #e2e8f0;
+      --muted: #64748b;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background: radial-gradient(ellipse at 20% 30%, rgba(59,130,246,0.06) 0%, transparent 50%),
+                  radial-gradient(ellipse at 80% 70%, rgba(139,92,246,0.06) 0%, transparent 50%);
+      pointer-events: none; z-index: 0;
+    }
+
+    /* TOP NAV */
+    .nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 2rem;
+      background: rgba(10,13,20,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-brand { font-weight: 700; font-size: 0.95rem; color: var(--text); }
+    .nav-brand span { color: #60a5fa; }
+    .nav-links { display: flex; gap: 1rem; align-items: center; }
+    .nav-link {
+      font-size: 0.82rem; color: var(--muted); text-decoration: none;
+      display: flex; align-items: center; gap: 0.4rem;
+      padding: 0.4rem 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: 8px; transition: all 0.2s;
+    }
+    .nav-link:hover { color: var(--text); border-color: var(--accent); }
+    .nav-link.highlight {
+      background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(139,92,246,0.2));
+      border-color: var(--accent); color: #93c5fd;
+    }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 2rem; position: relative; z-index: 1; }
+
+    /* HEADER */
+    header { text-align: center; padding: 3rem 0 2rem; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3);
+      border-radius: 100px; padding: 0.3rem 1rem;
+      font-size: 0.75rem; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.1em;
+      margin-bottom: 1.2rem;
+    }
+    .badge-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 800;
+      background: linear-gradient(135deg, #e2e8f0 0%, #93c5fd 50%, #c4b5fd 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      line-height: 1.1; margin-bottom: 1rem;
+    }
+    .subtitle { color: var(--muted); font-size: 1.1rem; max-width: 660px; margin: 0 auto 0.75rem; line-height: 1.6; }
+    .author-line { color: #475569; font-size: 0.82rem; margin-bottom: 2.5rem; }
+    .author-line a { color: #60a5fa; text-decoration: none; }
+    .author-line a:hover { text-decoration: underline; }
+
+    /* TABS */
+    .tabs { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; margin-bottom: 2.5rem; }
+    .tab {
+      padding: .6rem 1.4rem; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--muted); cursor: pointer;
+      font-size: .875rem; font-weight: 500; transition: all .2s;
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .tab:hover { border-color: var(--accent); color: var(--text); }
+    .tab.active {
+      background: linear-gradient(135deg,rgba(59,130,246,.2),rgba(139,92,246,.2));
+      border-color: var(--accent); color: #93c5fd;
+    }
+
+    /* STATS */
+    .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    @media(max-width:700px){ .stats-row{ grid-template-columns: repeat(2,1fr); } }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 1.2rem; text-align: center; position: relative; overflow: hidden;
+    }
+    .stat-card::after { content:''; position:absolute; top:0;left:0;right:0; height:2px; }
+    .stat-card:nth-child(1)::after { background: linear-gradient(90deg,#3b82f6,#60a5fa); }
+    .stat-card:nth-child(2)::after { background: linear-gradient(90deg,#8b5cf6,#c4b5fd); }
+    .stat-card:nth-child(3)::after { background: linear-gradient(90deg,#10b981,#34d399); }
+    .stat-card:nth-child(4)::after { background: linear-gradient(90deg,#f59e0b,#fbbf24); }
+    .stat-value { font-size: 2rem; font-weight: 800; color: var(--text); line-height: 1; margin-bottom: .3rem; }
+    .stat-label { font-size: .73rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+    /* MAIN GRID */
+    .main-grid { display: grid; grid-template-columns: 340px 1fr; gap: 1.5rem; align-items: start; }
+    @media(max-width:900px){ .main-grid{ grid-template-columns:1fr; } }
+
+    /* CARD */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
+    .card-title {
+      font-size: .7rem; text-transform: uppercase; letter-spacing: .12em;
+      color: var(--muted); margin-bottom: 1rem;
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .card-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    .request-text {
+      font-size: .92rem; line-height: 1.7; color: #cbd5e1;
+      background: var(--surface2); border-radius: 10px; padding: 1rem 1.2rem;
+      border-left: 3px solid var(--accent); margin-bottom: 1.2rem;
+    }
+    .context-grid { display: grid; gap: .5rem; }
+    .ctx-row { display: flex; align-items: center; gap: .75rem; font-size: .8rem; padding: .5rem .75rem; background: var(--surface2); border-radius: 8px; }
+    .ctx-key { color: var(--muted); min-width: 110px; font-family: 'JetBrains Mono', monospace; }
+    .ctx-val { color: #93c5fd; font-family: 'JetBrains Mono', monospace; font-size: .78rem; word-break: break-all; }
+
+    /* FLOW DIAGRAM SECTION */
+    .flow-section {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 2rem; margin-bottom: 1.5rem;
+    }
+    .flow-title { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 1.5rem; text-align: center; }
+    .flow-diagram {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+    }
+    .flow-row { display: flex; align-items: center; gap: 0; width: 100%; justify-content: center; }
+    .flow-box {
+      background: var(--surface2); border: 1.5px solid var(--border);
+      border-radius: 12px; padding: .85rem 1.2rem;
+      text-align: center; flex: 1; max-width: 200px;
+      transition: all .2s;
+    }
+    .flow-box:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .flow-box-icon { font-size: 1.4rem; margin-bottom: .3rem; }
+    .flow-box-title { font-size: .78rem; font-weight: 600; color: var(--text); margin-bottom: .2rem; }
+    .flow-box-sub { font-size: .68rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+    .flow-arrow { color: var(--muted); font-size: 1.2rem; padding: 0 .5rem; flex-shrink: 0; }
+    .flow-down { color: var(--muted); font-size: 1.4rem; margin: .3rem 0; }
+    .flow-branch { display: flex; align-items: center; gap: 0; width: 100%; justify-content: center; margin: .3rem 0; }
+    .flow-box.pass { border-color: rgba(16,185,129,.5); }
+    .flow-box.fail { border-color: rgba(245,158,11,.5); }
+    .flow-box.out { border-color: rgba(59,130,246,.5); }
+
+    /* PIPELINE */
+    .flow-panel { display: flex; flex-direction: column; gap: 1rem; }
+    .pipeline { display: flex; flex-direction: column; gap: 0; }
+    .step { display: flex; gap: 1.2rem; position: relative; cursor: default; }
+    .step-connector { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+    .step-dot {
+      width: 40px; height: 40px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; border: 1.5px solid transparent; transition: all .3s; position: relative; z-index: 1;
+    }
+    .step-line { width: 2px; flex: 1; min-height: 20px; background: linear-gradient(to bottom,var(--border),transparent); margin: 3px 0; }
+    .step-content { flex: 1; padding-bottom: 1.2rem; }
+    .step-name { font-weight: 600; font-size: .95rem; margin-bottom: .3rem; color: var(--text); }
+    .step-desc { font-size: .82rem; color: var(--muted); line-height: 1.5; }
+    .step-tag { display: inline-block; font-size: .68rem; padding: .15rem .6rem; border-radius: 100px; margin-top: .4rem; font-weight: 500; }
+
+    .step.step-input .step-dot{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.5);color:#60a5fa}
+    .step.step-prompt .step-dot{background:rgba(139,92,246,.15);border-color:rgba(139,92,246,.5);color:#a78bfa}
+    .step.step-llm .step-dot{background:rgba(249,115,22,.12);border-color:rgba(249,115,22,.45);color:#fb923c}
+    .step.step-validate .step-dot{background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.45);color:#34d399}
+    .step.step-retry .step-dot{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.45);color:#fbbf24}
+    .step.step-output .step-dot{background:rgba(16,185,129,.15);border-color:rgba(16,185,129,.5);color:#34d399}
+
+    .step.step-input .step-tag{background:rgba(59,130,246,.15);color:#93c5fd}
+    .step.step-prompt .step-tag{background:rgba(139,92,246,.15);color:#c4b5fd}
+    .step.step-llm .step-tag{background:rgba(249,115,22,.15);color:#fdba74}
+    .step.step-validate .step-tag{background:rgba(16,185,129,.15);color:#6ee7b7}
+    .step.step-retry .step-tag{background:rgba(245,158,11,.15);color:#fcd34d}
+    .step.step-output .step-tag{background:rgba(16,185,129,.15);color:#6ee7b7}
+
+    @keyframes stepGlow{0%{box-shadow:0 0 0 0 rgba(59,130,246,0)}50%{box-shadow:0 0 0 6px rgba(59,130,246,.1)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}
+    .step.active .step-dot{ animation:stepGlow 1.5s ease infinite; border-width:2px; }
+    .step.active .step-name{ color:#93c5fd; }
+    .step.completed .step-dot::after{
+      content:'✓';position:absolute;font-size:.7rem;font-weight:700;color:var(--green);
+      bottom:-2px;right:-2px;background:var(--bg);border-radius:50%;width:14px;height:14px;
+      display:flex;align-items:center;justify-content:center;line-height:14px;border:1px solid var(--green);
+    }
+
+    /* SAFETY */
+    .safety-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: .75rem; }
+    .safety-item { background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.9rem; }
+    .safety-icon{font-size:1.2rem;margin-bottom:.4rem}
+    .safety-name{font-size:.82rem;font-weight:600;color:var(--text);margin-bottom:.2rem}
+    .safety-desc{font-size:.74rem;color:var(--muted);line-height:1.4}
+
+    /* CONTROLS */
+    .run-btn-wrap{display:flex;gap:1rem;justify-content:center;margin:1.5rem 0}
+    .run-btn{
+      padding:.8rem 2rem;border-radius:12px;border:none;
+      font-family:'Inter',sans-serif;font-size:.9rem;font-weight:600;
+      cursor:pointer;display:flex;align-items:center;gap:.6rem;transition:all .2s;
+    }
+    .run-btn.primary{background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:white;box-shadow:0 0 20px rgba(59,130,246,.3)}
+    .run-btn.primary:hover{transform:translateY(-2px);box-shadow:0 0 30px rgba(59,130,246,.5)}
+    .run-btn.secondary{background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
+    .run-btn.secondary:hover{border-color:var(--accent);color:var(--text)}
+
+    /* STATUS */
+    .status-bar{
+      display:flex;align-items:center;gap:.75rem;background:var(--surface2);
+      border:1px solid var(--border);border-radius:10px;padding:.75rem 1rem;
+      font-size:.82rem;color:var(--muted);margin-bottom:1rem;
+    }
+    .status-indicator{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .3s}
+    .status-indicator.running{background:var(--accent);animation:pulse 1s infinite}
+    .status-indicator.done{background:var(--green)}
+
+    /* YAML */
+    .yaml-output{background:#0d1117;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .yaml-header{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;background:var(--surface2);border-bottom:1px solid var(--border)}
+    .yaml-dots{display:flex;gap:6px}
+    .yaml-dot{width:12px;height:12px;border-radius:50%}
+    .yaml-dot:nth-child(1){background:#ff5f57}
+    .yaml-dot:nth-child(2){background:#ffbd2e}
+    .yaml-dot:nth-child(3){background:#28c940}
+    .yaml-filename{font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--muted)}
+    .yaml-copy{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:.75rem;padding:.25rem .6rem;cursor:pointer;font-family:'Inter',sans-serif;transition:all .2s}
+    .yaml-copy:hover{border-color:var(--accent);color:var(--text)}
+    .yaml-body{padding:1.2rem;font-family:'JetBrains Mono',monospace;font-size:.8rem;line-height:1.7;color:#e2e8f0;max-height:450px;overflow-y:auto;white-space:pre}
+    .yaml-body::-webkit-scrollbar{width:6px}
+    .yaml-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    .y-key{color:#93c5fd}.y-val{color:#86efac}.y-str{color:#fda4af}
+    .y-comment{color:#475569}.y-cmd{color:#fcd34d}.y-version{color:#c4b5fd;font-weight:600}
+
+    /* ABOUT SECTION */
+    .about-section { margin-top: 3rem; }
+    .section-title {
+      font-size: 1.4rem; font-weight: 700; color: var(--text);
+      margin-bottom: 1.2rem; text-align: center;
+    }
+    .about-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; }
+    @media(max-width:800px){ .about-grid{ grid-template-columns:1fr; } }
+    .about-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 1.4rem; position: relative; overflow: hidden;
+    }
+    .about-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    }
+    .about-card:nth-child(1)::before { background: linear-gradient(90deg,#3b82f6,#8b5cf6); }
+    .about-card:nth-child(2)::before { background: linear-gradient(90deg,#10b981,#3b82f6); }
+    .about-card:nth-child(3)::before { background: linear-gradient(90deg,#f59e0b,#ef4444); }
+    .about-card-icon { font-size: 1.8rem; margin-bottom: .75rem; }
+    .about-card-title { font-size: .95rem; font-weight: 700; color: var(--text); margin-bottom: .5rem; }
+    .about-card-body { font-size: .82rem; color: var(--muted); line-height: 1.6; }
+    .about-card-body code {
+      font-family: 'JetBrains Mono', monospace; font-size: .75rem;
+      background: var(--surface2); padding: .1rem .3rem; border-radius: 4px; color: #93c5fd;
+    }
+
+    /* SCENARIO TABLE */
+    .scenario-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .scenario-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: .75rem 1rem; border-bottom: 1px solid var(--border); text-align: left; }
+    .scenario-table td { font-size: .85rem; padding: .75rem 1rem; border-bottom: 1px solid rgba(30,45,64,.5); color: var(--text); }
+    .scenario-table tr:last-child td { border-bottom: none; }
+    .sc-tag { display: inline-block; padding: .15rem .6rem; border-radius: 100px; font-size: .7rem; font-weight: 500; }
+    .sc-green{background:rgba(16,185,129,.15);color:#34d399}
+    .sc-blue{background:rgba(59,130,246,.15);color:#93c5fd}
+    .sc-orange{background:rgba(249,115,22,.15);color:#fb923c}
+    .sc-purple{background:rgba(139,92,246,.15);color:#c4b5fd}
+
+    /* FOOTER */
+    footer { text-align: center; padding: 2rem 0 3rem; color: var(--muted); font-size: .8rem; }
+    .footer-github { display: inline-flex; align-items: center; gap: .5rem; color: #60a5fa; text-decoration: none; font-weight: 600; font-size: .9rem; margin-bottom: 1rem; }
+    .footer-github:hover { text-decoration: underline; }
+    .footer-stack { display: flex; align-items: center; justify-content: center; gap: .75rem; margin-top: .75rem; flex-wrap: wrap; }
+    .stack-pill { background:var(--surface);border:1px solid var(--border);border-radius:100px;padding:.25rem .8rem;font-size:.72rem;color:var(--muted); }
+
+    @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    .fade-in{animation:fadeIn .4s ease}
+    ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">AI <span>BuildSpec</span> Generator</div>
+  <div class="nav-links">
+    <a class="nav-link" href="#about">About</a>
+    <a class="nav-link" href="#scenarios">Scenarios</a>
+    <a class="nav-link highlight" href="https://github.com/VrushabhChaudhari12/ai-buildspec-generator" target="_blank">
+      ⭐ GitHub Repo
+    </a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <header>
+    <div class="badge"><div class="badge-dot"></div>AI-Powered · Local LLM · AWS CodeBuild</div>
+    <h1>AI BuildSpec Generator</h1>
+    <p class="subtitle">A conversational AI agent that transforms plain-English developer requests into production-ready AWS CodeBuild <code style="font-family:JetBrains Mono;font-size:.9em;color:#93c5fd">buildspec.yml</code> files using a local LLaMA 3.2 model — with 4-layer termination safety.</p>
+    <div class="author-line">
+      Built by <a href="https://github.com/VrushabhChaudhari12" target="_blank">Vrushabh Chaudhari</a> ·
+      <a href="https://github.com/VrushabhChaudhari12/ai-buildspec-generator" target="_blank">View Source on GitHub</a>
+    </div>
+  </header>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-value">4</div><div class="stat-label">Scenarios</div></div>
+    <div class="stat-card"><div class="stat-value">4</div><div class="stat-label">Safety Layers</div></div>
+    <div class="stat-card"><div class="stat-value">3</div><div class="stat-label">Max Retries</div></div>
+    <div class="stat-card"><div class="stat-value">90s</div><div class="stat-label">Timeout</div></div>
+  </div>
+
+  <!-- FLOW DIAGRAM -->
+  <div class="flow-section" id="flow">
+    <div class="flow-title">🗺️ Agent Architecture Flow</div>
+    <div class="flow-diagram">
+      <div class="flow-row">
+        <div class="flow-box">
+          <div class="flow-box-icon">👤</div>
+          <div class="flow-box-title">Developer Input</div>
+          <div class="flow-box-sub">Plain-English request</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">
+          <div class="flow-box-icon">📋</div>
+          <div class="flow-box-title">mock_requests.py</div>
+          <div class="flow-box-sub">Request + Context</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">
+          <div class="flow-box-icon">📝</div>
+          <div class="flow-box-title">prompts.py</div>
+          <div class="flow-box-sub">System + User prompt</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">
+          <div class="flow-box-icon">🧠</div>
+          <div class="flow-box-title">Ollama LLaMA 3.2</div>
+          <div class="flow-box-sub">localhost:11434/v1</div>
+        </div>
+      </div>
+      <div class="flow-down">↓</div>
+      <div class="flow-row">
+        <div class="flow-box fail" style="max-width:160px">
+          <div class="flow-box-icon">🔁</div>
+          <div class="flow-box-title">Retry</div>
+          <div class="flow-box-sub">Exp. backoff ×3</div>
+        </div>
+        <div class="flow-arrow">←</div>
+        <div class="flow-box" style="max-width:240px;border-color:rgba(245,158,11,.5)">
+          <div class="flow-box-icon">✅</div>
+          <div class="flow-box-title">generator.py — Validate</div>
+          <div class="flow-box-sub">version:0.2 · yaml.safe_load · loop detect</div>
+        </div>
+        <div class="flow-arrow">→ pass →</div>
+        <div class="flow-box pass" style="max-width:160px">
+          <div class="flow-box-icon">💾</div>
+          <div class="flow-box-title">output_writer.py</div>
+          <div class="flow-box-sub">Save buildspec.yml</div>
+        </div>
+      </div>
+      <div class="flow-down">↓</div>
+      <div class="flow-row" style="gap:1rem;">
+        <div class="flow-box out" style="max-width:160px">
+          <div class="flow-box-icon">🟢</div>
+          <div class="flow-box-title">nodejs_ecr.yml</div>
+          <div class="flow-box-sub">ECR + Slack</div>
+        </div>
+        <div class="flow-box out" style="max-width:160px">
+          <div class="flow-box-icon">🐍</div>
+          <div class="flow-box-title">python_lambda.yml</div>
+          <div class="flow-box-sub">S3 + SNS</div>
+        </div>
+        <div class="flow-box out" style="max-width:160px">
+          <div class="flow-box-icon">☕</div>
+          <div class="flow-box-title">java_eks.yml</div>
+          <div class="flow-box-sub">ECR + kubectl</div>
+        </div>
+        <div class="flow-box out" style="max-width:160px">
+          <div class="flow-box-icon">⚛️</div>
+          <div class="flow-box-title">react_s3.yml</div>
+          <div class="flow-box-sub">S3 + CloudFront</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENARIO TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="selectScenario('nodejs_ecr',this)"><span>🟢</span> Node.js + ECR</button>
+    <button class="tab" onclick="selectScenario('python_lambda',this)"><span>🐍</span> Python Lambda</button>
+    <button class="tab" onclick="selectScenario('java_eks',this)"><span>☕</span> Java + EKS</button>
+    <button class="tab" onclick="selectScenario('react_s3',this)"><span>⚛️</span> React + S3</button>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+    <div style="display:flex;flex-direction:column;gap:1rem;">
+      <div class="card">
+        <div class="card-title">📥 Developer Request</div>
+        <div class="request-text" id="request-text"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔧 Project Context</div>
+        <div class="context-grid" id="context-grid"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🛡️ Termination Safety</div>
+        <div class="safety-grid">
+          <div class="safety-item"><div class="safety-icon">✅</div><div class="safety-name">Output Check</div><div class="safety-desc">Must start with <code style="color:#93c5fd;font-size:.7rem">version: 0.2</code></div></div>
+          <div class="safety-item"><div class="safety-icon">🔁</div><div class="safety-name">Max 3 Retries</div><div class="safety-desc">Exponential backoff on failure</div></div>
+          <div class="safety-item"><div class="safety-icon">⏱️</div><div class="safety-name">90s Timeout</div><div class="safety-desc">Per LLM request timeout guard</div></div>
+          <div class="safety-item"><div class="safety-icon">🔍</div><div class="safety-name">Loop Detector</div><div class="safety-desc">Breaks on 3 identical outputs</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-panel">
+      <div class="run-btn-wrap">
+        <button class="run-btn primary" id="runBtn" onclick="runSimulation()">▶ Simulate Agent Run</button>
+        <button class="run-btn secondary" onclick="resetSimulation()">↺ Reset</button>
+      </div>
+      <div class="status-bar">
+        <div class="status-indicator" id="statusDot"></div>
+        <span id="statusText">Click "Simulate Agent Run" to watch the agent process a request step-by-step</span>
+      </div>
+      <div class="card">
+        <div class="card-title">🤖 Agent Pipeline</div>
+        <div class="pipeline" id="pipeline">
+          <div class="step step-input" id="step-0">
+            <div class="step-connector"><div class="step-dot">📥</div><div class="step-line"></div></div>
+            <div class="step-content">
+              <div class="step-name">Receive Developer Request</div>
+              <div class="step-desc">Plain-English request + project context loaded from <code style="color:#93c5fd;font-size:.78rem">mock_requests.py</code></div>
+              <span class="step-tag">mock_requests.get_request()</span>
+            </div>
+          </div>
+          <div class="step step-prompt" id="step-1">
+            <div class="step-connector"><div class="step-dot">📝</div><div class="step-line"></div></div>
+            <div class="step-content">
+              <div class="step-name">Build Structured Prompt</div>
+              <div class="step-desc">System prompt (Senior AWS DevOps persona) + formatted user request with context variables injected</div>
+              <span class="step-tag">prompts.build_prompt()</span>
+            </div>
+          </div>
+          <div class="step step-llm" id="step-2">
+            <div class="step-connector"><div class="step-dot">🧠</div><div class="step-line"></div></div>
+            <div class="step-content">
+              <div class="step-name">LLM Call → Ollama / LLaMA 3.2</div>
+              <div class="step-desc">OpenAI-compatible call to <code style="color:#93c5fd;font-size:.78rem">localhost:11434/v1</code> — temp=0.1, max_tokens=4096</div>
+              <span class="step-tag">generator.generate_buildspec()</span>
+            </div>
+          </div>
+          <div class="step step-validate" id="step-3">
+            <div class="step-connector"><div class="step-dot">✅</div><div class="step-line"></div></div>
+            <div class="step-content">
+              <div class="step-name">Validate Output</div>
+              <div class="step-desc">Strip markdown fences → check <code style="color:#93c5fd;font-size:.78rem">version: 0.2</code> prefix → parse YAML → loop detection</div>
+              <span class="step-tag">yaml.safe_load() validation</span>
+            </div>
+          </div>
+          <div class="step step-retry" id="step-4">
+            <div class="step-connector"><div class="step-dot">🔁</div><div class="step-line"></div></div>
+            <div class="step-content">
+              <div class="step-name">Retry Logic (if needed)</div>
+              <div class="step-desc">Exponential backoff: 2s, 4s, 8s. Max 3 retries with 90s timeout. Loop detection threshold = 3</div>
+              <span class="step-tag">time.sleep(2**retry)</span>
+            </div>
+          </div>
+          <div class="step step-output" id="step-5">
+            <div class="step-connector"><div class="step-dot">💾</div></div>
+            <div class="step-content">
+              <div class="step-name">Save & Display Buildspec</div>
+              <div class="step-desc">Write <code style="color:#93c5fd;font-size:.78rem">buildspec_{scenario}.yml</code> to disk, print YAML, print summary with phase count</div>
+              <span class="step-tag">output_writer.save_buildspec()</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📄 Generated buildspec.yml</div>
+        <div class="yaml-output">
+          <div class="yaml-header">
+            <div class="yaml-dots"><div class="yaml-dot"></div><div class="yaml-dot"></div><div class="yaml-dot"></div></div>
+            <span class="yaml-filename" id="yaml-filename">buildspec_nodejs_ecr.yml</span>
+            <button class="yaml-copy" onclick="copyYaml()">Copy</button>
+          </div>
+          <div class="yaml-body" id="yaml-body"><span style="color:#475569;font-style:italic"># Click "Simulate Agent Run" to see generated YAML output</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ABOUT SECTION -->
+  <div class="about-section" id="about">
+    <div class="section-title">📚 Why This Matters — Real-World Impact</div>
+    <div class="about-grid">
+      <div class="about-card">
+        <div class="about-card-icon">⚡</div>
+        <div class="about-card-title">Zero DevOps Knowledge Required</div>
+        <div class="about-card-body">Developers describe what they want in plain English — the agent handles all AWS CLI commands, ECR login flows, Snyk scans, and Slack notification wiring. A Node.js developer never needs to memorize <code>aws ecr get-login-password</code> syntax again.</div>
+      </div>
+      <div class="about-card">
+        <div class="about-card-icon">🔒</div>
+        <div class="about-card-title">Safety-First Agentic Design</div>
+        <div class="about-card-body">4-layer termination safety prevents the agent from running indefinitely or producing invalid output. <code>version: 0.2</code> check, YAML validation, 90s timeout, and loop detection — all working together to guarantee reliable output every time.</div>
+      </div>
+      <div class="about-card">
+        <div class="about-card-icon">🏢</div>
+        <div class="about-card-title">Enterprise CI/CD Acceleration</div>
+        <div class="about-card-body">Teams waste hours writing and debugging buildspec files. This agent compresses that to seconds — with production-grade output including security scanning, artifact caching, multi-phase pipelines, and notification integrations baked in.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENARIOS TABLE -->
+  <div class="about-section" id="scenarios" style="margin-top:2.5rem">
+    <div class="section-title">🗂️ Supported Scenarios</div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="scenario-table">
+        <thead>
+          <tr>
+            <th>Scenario</th><th>Runtime</th><th>Build Tool</th><th>Deploy Target</th><th>Notifications</th><th>Security</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>🟢 <strong>Node.js + ECR</strong></td>
+            <td><span class="sc-tag sc-green">Node.js 20</span></td>
+            <td>npm + Jest</td>
+            <td>Amazon ECR + Docker</td>
+            <td><span class="sc-tag sc-blue">Slack Webhook</span></td>
+            <td>Snyk</td>
+          </tr>
+          <tr>
+            <td>🐍 <strong>Python Lambda</strong></td>
+            <td><span class="sc-tag sc-blue">Python 3.12</span></td>
+            <td>pytest + zip</td>
+            <td>S3 + AWS Lambda</td>
+            <td><span class="sc-tag sc-orange">AWS SNS</span></td>
+            <td>Snyk</td>
+          </tr>
+          <tr>
+            <td>☕ <strong>Java + EKS</strong></td>
+            <td><span class="sc-tag sc-orange">Java 17</span></td>
+            <td>Maven + JUnit</td>
+            <td>ECR + kubectl/EKS</td>
+            <td>—</td>
+            <td>Snyk</td>
+          </tr>
+          <tr>
+            <td>⚛️ <strong>React + S3</strong></td>
+            <td><span class="sc-tag sc-purple">Node.js 20</span></td>
+            <td>ESLint + Jest + Webpack</td>
+            <td>S3 + CloudFront</td>
+            <td>—</td>
+            <td>Snyk</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<footer>
+  <a class="footer-github" href="https://github.com/VrushabhChaudhari12/ai-buildspec-generator" target="_blank">
+    ⭐ Star on GitHub — VrushabhChaudhari12/ai-buildspec-generator
+  </a>
+  <div style="color:var(--muted);font-size:.78rem;margin-bottom:.75rem">Built by Vrushabh Chaudhari · Open Source · MIT License</div>
+  <div class="footer-stack">
+    <span class="stack-pill">🐍 Python 3.12</span>
+    <span class="stack-pill">🦙 Ollama / LLaMA 3.2</span>
+    <span class="stack-pill">☁️ AWS CodeBuild</span>
+    <span class="stack-pill">🔐 Snyk Security</span>
+    <span class="stack-pill">📨 Slack + SNS</span>
+    <span class="stack-pill">📦 pyyaml + openai</span>
+  </div>
+</footer>
+
+<script>
+  const SCENARIOS = {
+    nodejs_ecr: {
+      request: "I need a Node.js 20 app built, unit tests run with Jest, Docker image built and pushed to ECR, Slack notification on success or failure",
+      context: { project_name:"nodejs-app", runtime:"nodejs:20", aws_region:"us-east-1", account_id:"123456789012", ecr_repo:"nodejs-app-repo", slack_webhook:"https://hooks.slack.com/..." },
+      yaml: `version: 0.2\n\nenv:\n  variables:\n    AWS_DEFAULT_REGION: "us-east-1"\n    AWS_ACCOUNT_ID: "123456789012"\n    ECR_REPO: "nodejs-app-repo"\n\nphases:\n  install:\n    runtime-versions:\n      nodejs: 20\n    commands:\n      - npm install -g npm@latest\n      - npm install -g snyk\n      - npm install\n\n  pre_build:\n    commands:\n      - echo Logging in to Amazon ECR...\n      - aws ecr get-login-password --region $AWS_DEFAULT_REGION \\\n          | docker login --username AWS --password-stdin \\\n          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com\n      - snyk test --json > snyk-results.json || true\n\n  build:\n    commands:\n      - npm test -- --coverage\n      - docker build -t $ECR_REPO:$CODEBUILD_RESOLVED_SOURCE_VERSION .\n      - docker tag $ECR_REPO:$CODEBUILD_RESOLVED_SOURCE_VERSION \\\n          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO:latest\n\n  post_build:\n    commands:\n      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO:latest\n      - |\n        curl -X POST -H 'Content-type: application/json' \\\n        --data '{"text":"Build $CODEBUILD_BUILD_NUMBER $CODEBUILD_BUILD_STATUS"}' \\\n        $SLACK_WEBHOOK_URL\n\nartifacts:\n  files:\n    - '**/*'\n\ncache:\n  paths:\n    - /root/.npm/**/*`
+    },
+    python_lambda: {
+      request: "Python 3.12 Lambda function, run pytest, package as zip, upload to S3 bucket called my-lambda-artifacts, send SNS notification",
+      context: { project_name:"python-lambda", runtime:"python:3.12", aws_region:"us-east-1", account_id:"123456789012", s3_bucket:"my-lambda-artifacts", sns_topic:"lambda-deployments" },
+      yaml: `version: 0.2\n\nenv:\n  variables:\n    AWS_DEFAULT_REGION: "us-east-1"\n    S3_BUCKET: "my-lambda-artifacts"\n    SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:123456789012:lambda-deployments"\n\nphases:\n  install:\n    runtime-versions:\n      python: 3.12\n    commands:\n      - pip install pytest pytest-cov snyk\n      - pip install -r requirements.txt -t ./package\n\n  pre_build:\n    commands:\n      - snyk test --json > snyk-results.json || true\n      - python -m pytest tests/ --cov=. -v\n\n  build:\n    commands:\n      - cd package && zip -r9 ../lambda.zip . && cd ..\n      - zip -g lambda.zip *.py\n      - aws s3 cp lambda.zip s3://$S3_BUCKET/lambda-$CODEBUILD_BUILD_NUMBER.zip\n\n  post_build:\n    commands:\n      - |\n        aws sns publish \\\n          --topic-arn $SNS_TOPIC_ARN \\\n          --message "Lambda build $CODEBUILD_BUILD_NUMBER: $CODEBUILD_BUILD_STATUS"\n\nartifacts:\n  files:\n    - lambda.zip\n\ncache:\n  paths:\n    - /root/.cache/pip/**/*`
+    },
+    java_eks: {
+      request: "Java 17 Maven app, run JUnit tests, build Docker image, push to ECR, deploy to EKS cluster called prod-cluster using kubectl",
+      context: { project_name:"java-app", runtime:"java:17", aws_region:"us-east-1", account_id:"123456789012", ecr_repo:"java-app-repo", eks_cluster:"prod-cluster" },
+      yaml: `version: 0.2\n\nenv:\n  variables:\n    AWS_DEFAULT_REGION: "us-east-1"\n    ECR_REPO: "java-app-repo"\n    EKS_CLUSTER: "prod-cluster"\n\nphases:\n  install:\n    runtime-versions:\n      java: corretto17\n    commands:\n      - curl -LO "https://dl.k8s.io/release/stable.txt"\n      - pip install snyk\n\n  pre_build:\n    commands:\n      - aws ecr get-login-password --region $AWS_DEFAULT_REGION \\\n          | docker login --username AWS --password-stdin \\\n          $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com\n      - snyk test --json > snyk-results.json || true\n      - mvn test -B\n\n  build:\n    commands:\n      - mvn package -DskipTests -B\n      - docker build -t $ECR_REPO:$CODEBUILD_RESOLVED_SOURCE_VERSION .\n      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO:latest\n\n  post_build:\n    commands:\n      - aws eks update-kubeconfig --name $EKS_CLUSTER --region $AWS_DEFAULT_REGION\n      - kubectl set image deployment/java-app java-app=...$ECR_REPO:latest\n      - kubectl rollout status deployment/java-app\n\nartifacts:\n  files:\n    - target/*.jar\n\ncache:\n  paths:\n    - /root/.m2/**/*`
+    },
+    react_s3: {
+      request: "React app using Node 20, run ESLint, run Jest tests, build production bundle, sync to S3 bucket my-frontend-bucket, invalidate CloudFront cache",
+      context: { project_name:"react-frontend", runtime:"nodejs:20", aws_region:"us-east-1", account_id:"123456789012", s3_bucket:"my-frontend-bucket", cloudfront_distribution:"E1234567890ABC" },
+      yaml: `version: 0.2\n\nenv:\n  variables:\n    S3_BUCKET: "my-frontend-bucket"\n    CLOUDFRONT_DIST_ID: "E1234567890ABC"\n\nphases:\n  install:\n    runtime-versions:\n      nodejs: 20\n    commands:\n      - npm install -g snyk\n      - npm ci\n\n  pre_build:\n    commands:\n      - snyk test --json > snyk-results.json || true\n      - npm run lint\n      - npm test -- --watchAll=false --coverage\n\n  build:\n    commands:\n      - npm run build\n      - aws s3 sync build/ s3://$S3_BUCKET \\\n          --delete \\\n          --cache-control "max-age=31536000,public"\n\n  post_build:\n    commands:\n      - |\n        aws cloudfront create-invalidation \\\n          --distribution-id $CLOUDFRONT_DIST_ID \\\n          --paths "/*"\n\nartifacts:\n  files:\n    - build/**/*\n\ncache:\n  paths:\n    - /root/.npm/**/*\n    - node_modules/**/*`
+    }
+  };
+
+  let currentScenario = 'nodejs_ecr';
+  let simInterval = null;
+
+  function selectScenario(name, el) {
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    currentScenario = name;
+    updatePanels();
+    resetSimulation();
+    document.getElementById('yaml-filename').textContent = `buildspec_${name}.yml`;
+  }
+
+  function updatePanels() {
+    const s = SCENARIOS[currentScenario];
+    document.getElementById('request-text').textContent = s.request;
+    document.getElementById('context-grid').innerHTML = Object.entries(s.context)
+      .map(([k,v])=>`<div class="ctx-row"><span class="ctx-key">${k}</span><span class="ctx-val">${v}</span></div>`)
+      .join('');
+  }
+
+  function setStep(index) {
+    document.querySelectorAll('.step').forEach((s,i)=>{
+      s.classList.remove('active','completed');
+      if(i<index) s.classList.add('completed');
+      if(i===index) s.classList.add('active');
+    });
+  }
+
+  function runSimulation() {
+    if(simInterval) return;
+    document.getElementById('runBtn').disabled = true;
+    document.getElementById('runBtn').textContent = '⏳ Running...';
+    const msgs = [
+      '📥 Loading developer request and project context...',
+      '📝 Building structured prompt for LLaMA 3.2...',
+      '🧠 Calling Ollama at localhost:11434 — awaiting LLM response...',
+      '✅ Validating YAML — checking version prefix + parse...',
+      '🔁 Output valid! No retry needed. Checking for loops...',
+      '💾 Saving buildspec file and printing summary...'
+    ];
+    const dot = document.getElementById('statusDot');
+    const txt = document.getElementById('statusText');
+    dot.className = 'status-indicator running';
+    let step = 0;
+    simInterval = setInterval(()=>{
+      if(step>=6){
+        clearInterval(simInterval); simInterval=null;
+        dot.className='status-indicator done';
+        txt.textContent='✅ Buildspec generated successfully!';
+        document.getElementById('runBtn').disabled=false;
+        document.getElementById('runBtn').textContent='▶ Simulate Agent Run';
+        showYaml(); return;
+      }
+      setStep(step); txt.textContent=msgs[step]||''; step++;
+    }, 1100);
+  }
+
+  function resetSimulation() {
+    if(simInterval){clearInterval(simInterval);simInterval=null;}
+    document.querySelectorAll('.step').forEach(s=>s.classList.remove('active','completed'));
+    document.getElementById('statusDot').className='status-indicator';
+    document.getElementById('statusText').textContent='Click "Simulate Agent Run" to watch the agent process a request step-by-step';
+    document.getElementById('runBtn').disabled=false;
+    document.getElementById('runBtn').textContent='▶ Simulate Agent Run';
+    document.getElementById('yaml-body').innerHTML='<span style="color:#475569;font-style:italic"># Run the simulation above to see generated YAML output</span>';
+  }
+
+  function showYaml() {
+    const yaml = SCENARIOS[currentScenario].yaml;
+    document.getElementById('yaml-body').innerHTML = yaml
+      .split('\n').map(line=>{
+        if(line.trim().startsWith('#')) return `<span style="color:#475569">${e(line)}</span>`;
+        if(line.match(/^\s*-\s/)) return line.replace(/^(\s*-\s*)(.*)$/,(_,p,r)=>`<span style="color:#475569">${e(p)}</span><span style="color:#fcd34d">${e(r)}</span>`);
+        if(line.match(/^version:/)) return `<span style="color:#c4b5fd;font-weight:600">${e(line)}</span>`;
+        return line.replace(/^(\s*)([a-zA-Z_-]+)(\s*:)(.*)$/,(_,sp,key,col,val)=>
+          `${e(sp)}<span style="color:#93c5fd">${e(key)}</span><span style="color:#64748b">${e(col)}</span>${val?`<span style="color:#86efac">${e(val)}</span>`:''}`);
+      }).join('\n');
+    document.getElementById('yaml-body').classList.add('fade-in');
+    setTimeout(()=>document.getElementById('yaml-body').classList.remove('fade-in'),500);
+  }
+
+  function e(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function copyYaml(){
+    navigator.clipboard.writeText(SCENARIOS[currentScenario].yaml).then(()=>{
+      const b=document.querySelector('.yaml-copy');b.textContent='Copied!';
+      setTimeout(()=>b.textContent='Copy',1500);
+    });
+  }
+
+  updatePanels();
+</script>
+</body>
+</html>
