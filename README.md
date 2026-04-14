@@ -1,131 +1,138 @@
 # AI BuildSpec & Pipeline Generator
 
-An AI-powered generator that takes plain-English descriptions of what needs to be built and returns production-ready AWS CodeBuild buildspec.yml files.
+> **Plain-English → production-ready AWS CodeBuild `buildspec.yml` in seconds.** Eliminates the hours developers spend writing, debugging, and iterating on pipeline config by delegating YAML generation to an LLM with strict schema validation, retry logic, and loop detection.
 
-## Overview
+---
 
-This project uses a local LLM (Ollama with llama3.2) to generate AWS CodeBuild BuildSpec files from simple developer requests. The generated BuildSpecs include:
+## The Problem This Solves
 
-- **Snyk Security Scanning**: Automated security vulnerability scanning in the pre_build phase
-- **ECR Push**: Docker image building and pushing to Amazon ECR
-- **Slack Notifications**: Real-time build status notifications via Slack webhooks
-- **SNS Notifications**: Build status notifications via Amazon SNS
-- **Full CI/CD Pipeline**: Complete install, pre_build, build, and post_build phases
+Writing AWS CodeBuild buildspecs is repetitive, error-prone boilerplate. A Node.js ECR pipeline needs ECR login, `docker build`, `docker push`, Snyk scan, Slack webhook — developers copy-paste from docs and spend 30–60 minutes getting YAML indentation and CLI flags right. This tool reduces that to a one-liner.
 
-## Supported Scenarios
+```
+# Before: 45 minutes of YAML wrangling
+# After:
+python main.py --scenarios nodejs_ecr python_lambda
+```
 
-1. **Node.js + ECR**: Node.js 20 app with Jest tests, Docker image pushed to ECR, Slack notifications
-2. **Python Lambda**: Python 3.12 Lambda function with pytest, packaged as ZIP, uploaded to S3, SNS notifications
-3. **Java + EKS**: Java 17 Maven app with JUnit tests, Docker image pushed to ECR, deployed to EKS
-4. **React + S3**: React app with ESLint and Jest tests, production bundle synced to S3, CloudFront cache invalidation
+---
 
-## Stack
+## What Gets Generated
 
-- **Language**: Python 3.10+
-- **LLM**: Ollama (localhost:11434) with llama3.2 model
-- **Dependencies**: openai, pyyaml
+Four real-world pipeline scenarios, each producing a complete multi-phase buildspec:
 
-## Installation
+| Scenario | Stack | Phases | Integrations |
+|----------|-------|--------|----------------------------|
+| `nodejs_ecr` | Node.js 20 + Docker | install, pre_build, build, post_build | ECR, Jest, Snyk, Slack |
+| `python_lambda` | Python 3.12 | install, pre_build, build, post_build | S3 ZIP upload, SNS, pytest |
+| `java_eks` | Java 17 + Maven | install, pre_build, build, post_build | ECR, EKS deploy, JUnit |
+| `react_s3` | React + Node | install, pre_build, build, post_build | S3 sync, CloudFront invalidation |
 
-1. Install the required Python packages:
+Each buildspec includes:
+- **`pre_build`**: Snyk security scan (`snyk test --json > snyk-results.json || true`)
+- **`build`**: Compile, test, Docker build/push or artifact packaging
+- **`post_build`**: Slack/SNS notification with build number and status
+- **Environment variables**: `$AWS_DEFAULT_REGION`, `$AWS_ACCOUNT_ID`, `$SLACK_WEBHOOK_URL`
 
+---
+
+## Architecture
+
+```
+Developer request (plain English)
+        |
+        v
+  prompts.py  ──────────────────────────────────┐
+  (system prompt + context builder)             |
+        |                                        |
+        v                                        |
+  generator.py  (LLM call via OpenAI client)    |
+        |                                        |
+        +─── validate: starts with "version: 0.2"|
+        +─── validate: YAML parseable           |
+        +─── loop detection (3 identical = stop) |
+        +─── exponential backoff on failure      |
+        |                                        |
+        v                                        |
+  output_writer.py  ────────────────────────────┘
+  (save buildspec.yml to output/)
+        |
+        v
+  output/<scenario>/buildspec.yml
+```
+
+---
+
+## Engineering Quality
+
+| Feature | Implementation |
+|---------|---------------|
+| Config management | `config.py` — all settings via env vars with typed defaults |
+| Structured logging | Python `logging` module — level, timestamp, module name |
+| Input validation | Schema check: `version: 0.2` + `yaml.safe_load()` |
+| Retry logic | Exponential backoff (2^n seconds), max 3 retries |
+| Loop detection | Tracks repeated outputs, breaks after threshold |
+| CLI interface | `argparse` — `--scenarios`, `--output-json` |
+| Error isolation | Per-scenario try/except, continues on individual failures |
+| LLM-agnostic | OpenAI-compatible client — swap Ollama for GPT-4/Claude via env vars |
+
+---
+
+## Quick Start
+
+### 1. Install Ollama + model
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama run llama3.2
+```
+
+### 2. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Ensure Ollama is running with the llama3.2 model:
-
+### 3. Run the generator
 ```bash
-ollama serve
-# In another terminal:
-ollama pull llama3.2
+# All four scenarios
+python main.py
+
+# Specific scenarios
+python main.py --scenarios nodejs_ecr python_lambda
+
+# Export results summary
+python main.py --output-json results.json
 ```
 
-## Usage
-
-Run the generator for all four scenarios:
-
+### Optional environment variables
 ```bash
-py main.py
+export BASE_URL=http://localhost:11434/v1
+export MODEL=llama3.2
+export LOG_LEVEL=DEBUG
+export SLACK_WEBHOOK_URL=https://hooks.slack.com/...
 ```
 
-This will:
-1. Process each of the four developer scenarios
-2. Generate production-ready buildspec.yml files
-3. Save them as `buildspec_{scenario}.yml` in the current directory
-4. Print the generated YAML to the console
+---
 
-## Output
+## Project Structure
 
-The tool generates buildspec files for each scenario:
-
-- `buildspec_nodejs_ecr.yml`
-- `buildspec_python_lambda.yml`
-- `buildspec_java_eks.yml`
-- `buildspec_react_s3.yml`
-
-## Example
-
-Input (Developer Request):
 ```
-"I need a Node.js 20 app built, unit tests run with Jest, Docker image built and pushed to ECR, Slack notification on success or failure"
+ai-buildspec-generator/
+├── main.py             # CLI entry point — argparse, orchestration
+├── generator.py        # LLM call, YAML validation, retry + loop detection
+├── prompts.py          # System prompt + context-aware user message builder
+├── config.py           # Centralized config with env var overrides
+├── mock_requests.py    # Simulated developer requests for 4 scenarios
+├── output_writer.py    # Save buildspec.yml to output directory
+├── requirements.txt    # openai, pyyaml
+└── docs/               # GitHub Pages — interactive visualizer
 ```
 
-Output (Generated BuildSpec):
-```yaml
-version: 0.2
+---
 
-env:
-  variables:
-    AWS_DEFAULT_REGION: "us-east-1"
-    AWS_ACCOUNT_ID: "123456789012"
+## Why This Matters (Resume Context)
 
-phases:
-  install:
-    commands:
-      - npm install -g npm@latest
-      - npm install
-
-  pre_build:
-    commands:
-      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
-      - snyk test --json > snyk-results.json || true
-
-  build:
-    commands:
-      - npm test
-
-  post_build:
-    commands:
-      - docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/nodejs-app:latest .
-      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/nodejs-app:latest
-      - |
-        curl -X POST -H 'Content-type: application/json' \
-        --data '{"text":"Build $CODEBUILD_BUILD_NUMBER $CODEBUILD_BUILD_STATUS in $AWS_DEFAULT_REGION"}' \
-        $SLACK_WEBHOOK_URL
-
-artifacts:
-  files:
-    - '**/*'
-  name: build-output
-
-cache:
-  paths:
-    - /root/.npm/**/*
-```
-
-## Features
-
-- **Four-Layer Termination Safety**:
-  1. Checks output starts with "version: 0.2"
-  2. Maximum 3 retries with exponential backoff
-  3. 90-second timeout per request
-  4. Loop detection to break on repeated outputs
-
-- **YAML Validation**: All generated BuildSpecs are validated using Python's yaml.safe_load before being saved
-
-- **Production-Ready**: Includes real AWS CLI commands, environment variables, security scanning, and notifications
-
-## License
-
-MIT
+This project demonstrates end-to-end DevOps AI automation for a real pain point:
+- **Prompt engineering discipline**: system prompt constrains format to valid YAML — no markdown, no explanations, just `version: 0.2` output
+- **Production safety patterns**: validation gates, retry with backoff, loop detection — same patterns used in production LLM pipelines
+- **Real CI/CD knowledge**: generated buildspecs use actual AWS CLI commands, ECR login syntax, EKS `kubectl` deployment, S3 artifact upload
+- **Tool is LLM-agnostic**: swap Ollama → OpenAI GPT-4 or Anthropic Claude by changing two env vars — demonstrates portable AI integration design
+- **Interactive demo**: GitHub Pages visualizer at `/docs` for non-technical stakeholders
